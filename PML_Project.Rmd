@@ -1,0 +1,111 @@
+---
+title: "Practical Machine Learning"
+author: "Chuck F"
+date: "Friday, March 20, 2015"
+output: html_document
+---
+### Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+### Data 
+
+The training data for this project are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test data are available here: 
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+```{r, cache=TRUE, message=FALSE, warning=FALSE}
+library(caret)
+library(randomForest)
+set.seed(1234)
+```
+
+```{r download data,  cache=TRUE, message=FALSE}
+if (!file.exists("pmlTraining.csv")) {
+    download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", 
+        destfile = "pmlTraining.csv")
+}
+if (!file.exists("pmlTesting.csv")) {
+    download.file("http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", 
+        destfile = "pmlTesting.csv")
+}
+
+PMLtraining <- read.csv("pmlTraining.csv", header = TRUE, na.strings = c("NA",""))
+PMLtesting <- read.csv("pmlTesting.csv", header = TRUE, na.strings = c("NA",""))
+
+```
+
+The goal is to predict the manner in which they did the exercise. 
+This is the "classe" variable in the dataset. We can use all other variables for 
+predicting (`r dim(PMLtraining)[2]-1`)
+
+```{r streamline data, cache=TRUE}
+#find columns with way too many NA values to make a difference in our model
+my_training <- PMLtraining[ , colSums(is.na(PMLtraining)) == 0]
+
+#all of these columns are superfluous and will not impact our model
+delete_these = c('X', 'user_name', 'raw_timestamp_part_1', 'raw_timestamp_part_2', 'cvtd_timestamp', 'new_window', 'num_window')
+
+my_training <- my_training[,!names(my_training) %in% delete_these]
+
+```
+We started with `r dim(PMLtraining)[2]-1` but have reduced that down to 
+`r dim(my_training)[2]-1`.
+
+
+Following good practices - we need to split our Test set into two partitions -
+70% to build our model, and verify against the 30%.
+```{r process data, warning=FALSE, cache=TRUE}
+inTrain = createDataPartition(y = my_training$classe, p = 0.7, list = FALSE)
+train <- my_training[inTrain,]
+test <- my_training[-inTrain,]
+```
+
+```{r create our train model, cache=TRUE, message=FALSE}
+fit <- randomForest(classe ~ ., data=train)
+```
+
+```{r, cache=TRUE}
+
+mypredict <- predict(fit, test)
+
+fit
+
+```
+Fit$confusion shows us that we're pretty accurate with our model - very small errors!
+We've taken 70% of the "test" set as a model, to predict the classe on the 
+remaining 30% of the "test" set.
+
+We're now very confident in the randomForest model for this data - we can now 
+model the entire training set to work against the given test set.
+
+```{r Final Model, cache=TRUE}
+#remember train is 70% of my_training and my_training is 
+#  the transformed given training set
+final_fit <- randomForest(classe ~ ., data=my_training)
+```
+
+``` {r Final Test}
+final <- predict(final_fit, PMLtesting)
+final_fit
+
+```
+Our first training fit error was `r fit$error` and our final model has an error 
+of `r final_fit$error`
+```{r create submission file}
+answers <- final
+#given to us by the instructor
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+pml_write_files(answers)
+
+
+
+```
